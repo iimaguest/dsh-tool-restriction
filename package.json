@@ -7,16 +7,16 @@
     "url": "git+https://github.com/iimaguest/dsh-tool-restriction.git"
   },
   "type": "module",
-  "main": "lib/index.js",
+  "main": "lib/types/index.js",
   "types": "lib/types/index.d.ts",
   "exports": {
     ".": {
       "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
+      "default": "./lib/types/index.js"
     },
     "./invariant": {
       "types": "./lib/types/invariant.d.ts",
-      "default": "./lib/invariant.js"
+      "default": "./lib/types/invariant.js"
     },
     "./types": {
       "types": "./lib/types/types.d.ts",
