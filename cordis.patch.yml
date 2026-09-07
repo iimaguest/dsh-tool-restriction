@@ -1,0 +1,6 @@
+# dsh-tool-restriction bundle patch — mount the per-session tool mask. The
+# mask folds `tool-restriction/selected`, seeds each preset's saved default,
+# and filters tool-guidance prose. No config is required.
+- insert:
+    - id: tool-restriction
+      name: dsh-tool-restriction

@@ -1,0 +1,95 @@
+{
+  "name": "dsh-tool-restriction",
+  "description": "Per-session tool mask for DeepSeek Harness (ctx.toolRestriction): an allow-list over a session's inherited tool set, chosen in the blank window, fixed for the run, and saved per preset. Ships the preset tool-defaults (tools.yml) reader too.",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iimaguest/dsh-tool-restriction.git"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./tools": {
+      "types": "./lib/types/tools.d.ts",
+      "default": "./lib/types/tools.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib",
+    "src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "Apache-2.0",
+  "author": "iimaguest",
+  "bugs": {
+    "url": "https://github.com/iimaguest/dsh-tool-restriction/issues"
+  },
+  "homepage": "https://github.com/iimaguest/dsh-tool-restriction#readme",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "tool-restriction",
+    "tool-mask",
+    "permissions"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "prepare": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-agent": ">=0.1.0-rc.6",
+    "@deepseek-ai/dsh-agent-presets": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-atomic-write": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-invariants": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-session": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-session-projection": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-settings": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-system-prompt": ">=0.0.1-rc.1",
+    "@deepseek-ai/dsh-tools": ">=0.0.1-rc.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-agent": { "optional": true },
+    "@deepseek-ai/dsh-agent-presets": { "optional": true },
+    "@deepseek-ai/dsh-atomic-write": { "optional": true },
+    "@deepseek-ai/dsh-invariants": { "optional": true },
+    "@deepseek-ai/dsh-session": { "optional": true },
+    "@deepseek-ai/dsh-session-projection": { "optional": true },
+    "@deepseek-ai/dsh-settings": { "optional": true },
+    "@deepseek-ai/dsh-system-prompt": { "optional": true },
+    "@deepseek-ai/dsh-tools": { "optional": true }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "js-yaml": "^4.1.0"
+  }
+}
