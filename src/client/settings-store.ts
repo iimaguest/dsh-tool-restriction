@@ -67,15 +67,18 @@ export function savedOverridesOf(view: SettingsNamespaceView): Record<string, { 
 }
 
 /**
- * Read the shared deployment board the host seeds into the namespace. All
- * presets share one board (the full composed tool set), so the section can
- * render the same checkbox picker the composer does for every preset.
+ * Read one preset's composed board the host seeds into the namespace. Each
+ * preset gets its own board (its composed tool set — minimal is two tools,
+ * standard is the full set, a user preset carries its own extras), with a
+ * shared `default` board as the fallback while the host has not seeded the
+ * preset specifically.
  * @param view - tool-restriction namespace descriptor.
+ * @param presetId - the preset whose board to read.
  * @returns the grouped board, or empty when the host has not seeded one.
  */
-export function boardOf(view: SettingsNamespaceView): readonly ToolRestrictionGroup[] {
+export function boardOf(view: SettingsNamespaceView, presetId: string): readonly ToolRestrictionGroup[] {
   const boards = (view.value as { boards?: Record<string, unknown> } | null)?.boards
-  const board = boards?.['default']
+  const board = boards?.[presetId] ?? boards?.['default']
   if (!Array.isArray(board)) return []
   return board.filter((group): group is ToolRestrictionGroup =>
     typeof group === 'object' && group !== null
@@ -250,7 +253,6 @@ export class ToolDefaultsSettingsController {
       return
     }
     const overrides = savedOverridesOf(view)
-    const board = boardOf(view)
     const rows: PresetToolDefaultRow[] = [...this.presets.entries()].map(([id, meta]) => {
       const override = overrides[id]
       return {
@@ -260,7 +262,7 @@ export class ToolDefaultsSettingsController {
         ...meta.description === undefined ? {} : { description: meta.description },
         allow: override?.allow ?? [],
         overridden: override !== undefined,
-        board,
+        board: boardOf(view, id),
       }
     })
     this.store.update((state) => {

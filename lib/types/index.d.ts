@@ -140,14 +140,19 @@ export declare class ToolRestrictionService extends Service {
     /** Dispose one agent's applied visible-set restriction and guard. */
     private uninstallForAgent;
     /**
-     * Seed the settings section's checkbox board with the full deployment tool
-     * set (grouped exactly like the blank-session picker board). The board is
-     * the global `ctx.tools` view — every composed tool with its model-facing
-     * description — so the section offers the same checkbox picker the composer
-     * does. It rides the settings namespace's `boards` field (a derived value
-     * the section reads; it is re-seeded on every startup and on `tools/change`
-     * so a preset recomposition updates the offered set).
-     * @returns settlement once the namespace reflects the current tool set.
+     * Seed the settings section's checkbox boards: one board per roster preset
+     * plus a shared `default` board. Each preset's board is its composed tool
+     * set grouped exactly like the blank-session picker. A preset composes its
+     * real plugin tree ONCE under a standing scope (`standingKeyFor`), so every
+     * roster preset yields its true tool set here — standard's full coding set,
+     * minimal's two tools, creator's specials — whether or not any session has
+     * composed on it yet. The standard tools live on the agent plane each preset
+     * composes and are invisible in the global view, so the standing scope (not
+     * `ctx.tools.schemas()`) is the authoritative source. The boards ride the
+     * settings namespace's `boards` field (derived, read-only for the section;
+     * re-seeded on startup, on `agent/created`, and on `tools/change` so a
+     * preset recomposition updates the offered set).
+     * @returns settlement once the namespace reflects the current tool sets.
      */
     private refreshBoards;
     /**

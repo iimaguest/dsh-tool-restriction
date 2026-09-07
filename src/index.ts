@@ -204,6 +204,10 @@ export class ToolRestrictionService extends Service {
     // preset edit updates the board.
     void this.refreshBoards()
     ctx.on('tools/change', () => { void this.refreshBoards() })
+    // An agent composition is what makes the full tool set visible: the
+    // standard tools live on the agent plane each preset composes, so once
+    // the first agent composes, seed the settings board from its scoped view.
+    ctx.on('agent/created', () => { void this.refreshBoards() })
 
     // Seeding: a fresh session materializes its seed mask into the log so the
     // session is self-contained (model-visible ⟺ logged). A session with a
@@ -499,22 +503,62 @@ export class ToolRestrictionService extends Service {
   }
 
   /**
-   * Seed the settings section's checkbox board with the full deployment tool
-   * set (grouped exactly like the blank-session picker board). The board is
-   * the global `ctx.tools` view — every composed tool with its model-facing
-   * description — so the section offers the same checkbox picker the composer
-   * does. It rides the settings namespace's `boards` field (a derived value
-   * the section reads; it is re-seeded on every startup and on `tools/change`
-   * so a preset recomposition updates the offered set).
-   * @returns settlement once the namespace reflects the current tool set.
+   * Seed the settings section's checkbox boards: one board per roster preset
+   * plus a shared `default` board. Each preset's board is its composed tool
+   * set grouped exactly like the blank-session picker. A preset composes its
+   * real plugin tree ONCE under a standing scope (`standingKeyFor`), so every
+   * roster preset yields its true tool set here — standard's full coding set,
+   * minimal's two tools, creator's specials — whether or not any session has
+   * composed on it yet. The standard tools live on the agent plane each preset
+   * composes and are invisible in the global view, so the standing scope (not
+   * `ctx.tools.schemas()`) is the authoritative source. The boards ride the
+   * settings namespace's `boards` field (derived, read-only for the section;
+   * re-seeded on startup, on `agent/created`, and on `tools/change` so a
+   * preset recomposition updates the offered set).
+   * @returns settlement once the namespace reflects the current tool sets.
    */
   private async refreshBoards(): Promise<void> {
     const settings = this.ctx.get('settings')
     if (settings === undefined) return
-    const board = buildGroups(this.ctx.tools.schemas())
-    if (board.length === 0) return
+    const presets = this.ctx.get('agentPresets')
+    // A preset's standing composition is the authoritative per-preset board.
+    // `standingKeyFor` composes the preset's plugins (mounting no agent, no
+    // session, no turn) and returns the standing scope key its registered
+    // tools are visible under — exactly what a session on that preset
+    // inherits, even before any session composes on it.
+    const boards: Record<string, readonly ToolRestrictionGroup[]> = {}
+    if (presets !== undefined) {
+      for (const preset of await presets.list()) {
+        try {
+          const key = await presets.standingKeyFor(preset.id)
+          const board = buildGroups(this.ctx.tools.schemas(key))
+          if (board.length > 0) boards[preset.id] = board
+        } catch {
+          // A preset whose composition cannot mount (broken file, missing
+          // dependency) yields no standing board; keep any already-seeded
+          // board below rather than dropping it.
+        }
+      }
+    }
+    // Presets the roster no longer lists keep their previously seeded board:
+    // a deleted preset's board must not vanish from the settings section
+    // while the namespace still carries it, and a broken preset keeps what a
+    // live mount last produced. Boards are re-derived on every refresh, so a
+    // preset that recovers re-seeds from its standing composition.
+    const previous = this.settingsSource().boards ?? {}
+    for (const [presetId, board] of Object.entries(previous)) {
+      if (boards[presetId] === undefined && board.length > 0) boards[presetId] = board
+    }
+    // The shared default board is the widest board seen (the standard preset
+    // is the canonical full set), or the global view while nothing composes.
+    const widest = [...Object.values(boards)].sort((left, right) =>
+      right.reduce((sum, group) => sum + group.tools.length, 0)
+      - left.reduce((sum, group) => sum + group.tools.length, 0))[0]
+    const fallback = widest ?? buildGroups(this.ctx.tools.schemas())
+    if (fallback.length === 0 && Object.keys(boards).length === 0) return
+    if (fallback.length > 0) boards.default = fallback
     try {
-      await settings.update(TOOL_RESTRICTION_SETTINGS_NAMESPACE, { boards: { default: board } })
+      await settings.update(TOOL_RESTRICTION_SETTINGS_NAMESPACE, { boards })
     } catch (error: unknown) {
       this.ctx.logger.warn(`dsh-tool-restriction: seeding settings board failed: ${String(error)}`)
     }
