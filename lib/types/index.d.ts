@@ -140,6 +140,19 @@ export declare class ToolRestrictionService extends Service {
     /** Dispose one agent's applied visible-set restriction and guard. */
     private uninstallForAgent;
     /**
+     * Queue a full settings-board pass. A recomposition event can fire while
+     * Loader settlement is still in flight (a sibling plugin registering a tool
+     * during its `apply()`), and the full pass mounts every roster preset — a
+     * preset's own tool registrations fire more `tools/change`, re-entering the
+     * handler and holding settlement hostage to the cascade. The runner skips
+     * until the Loader settles, so boot composes nothing; the pass still runs
+     * once afterward, and every later recomposition event coalesces into the
+     * one pending pass.
+     */
+    private scheduleBoardsRefresh;
+    /** Whether a full boards pass is already queued; one pass at a time. */
+    private refreshPending;
+    /**
      * Seed the settings section's checkbox boards: one board per roster preset
      * plus a shared `default` board. Each preset's board is its composed tool
      * set grouped exactly like the blank-session picker. A preset composes its
@@ -152,9 +165,43 @@ export declare class ToolRestrictionService extends Service {
      * settings namespace's `boards` field (derived, read-only for the section;
      * re-seeded on startup, on `agent/created`, and on `tools/change` so a
      * preset recomposition updates the offered set).
+     *
+     * This full pass composes every roster preset's standing tree, which mounts
+     * the preset's whole plugin composition — expensive, so it runs only AFTER
+     * Loader settlement (see {@link scheduleBoardsRefresh} and
+     * {@link seedBoardsFast} for the boot-time path).
      * @returns settlement once the namespace reflects the current tool sets.
      */
     private refreshBoards;
+    /**
+     * Seed the settings section's checkbox boards from the fast sources only,
+     * for the boot-time path where composing preset trees would hold Loader
+     * settlement hostage. Reads each already-composed standing mount's tools
+     * (free — the composition already exists), each preset's authored
+     * `tools.yml`, and the global tool view as a shared fallback. Presets with
+     * no standing mount and no authored tools.yml keep the global view board
+     * until the post-settlement full pass composes them.
+     * @returns settlement once the namespace reflects the fast sources.
+     */
+    private seedBoardsFast;
+    /**
+     * Persist a computed board map into the settings namespace, filling in the
+     * shared `default` board (the widest board seen, or the global view) and
+     * keeping previously-seeded boards for presets this pass could not recompute
+     * (deleted presets, broken compositions).
+     * @param boards - the boards computed by this pass, keyed by preset id.
+     * @returns settlement once the namespace reflects the combined board set.
+     */
+    private commitBoards;
+    /**
+     * One preset's authored `tools.yml` board, when it publishes one. Built-in
+     * presets (standard, minimal, ptc, cordis) publish no `tools.yml` — only the
+     * composition — so they yield undefined here and await the standing pass.
+     * @param preset - the roster preset whose authored tools to read.
+     * @returns the grouped board from `groups` or `default.allow`, or undefined
+     * when the preset publishes no tool metadata or the file is unreadable.
+     */
+    private authoredBoard;
     /**
      * Replace the agent's visible-set restriction with the live fold's mask.
      *
