@@ -139,6 +139,15 @@ export function HeroToolRestrictionPanel({
               >
                 {t('selectNone')}
               </button>
+              <button
+                type="button"
+                className={css.action}
+                disabled={disabled}
+                title={t('presetDefaultHint')}
+                onClick={() => { submit('/tool-restriction default') }}
+              >
+                {t('presetDefault')}
+              </button>
             </div>
           </div>
           {groups.map(group => (

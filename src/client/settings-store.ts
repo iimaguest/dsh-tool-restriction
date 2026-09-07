@@ -14,6 +14,7 @@ import {
 import type {
   SettingsDescribeFace, SettingsSchemaService,
 } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ToolRestrictionGroup } from '../types.ts'
 
 /** Tool-restriction's settings namespace on the host wire. */
 export const TOOL_RESTRICTION_SETTINGS_NS = 'tool-restriction'
@@ -32,6 +33,8 @@ export interface PresetToolDefaultRow {
   allow: readonly string[]
   /** True when an explicit saved override is in force (vs the authored default). */
   overridden: boolean
+  /** The grouped tool board the settings section renders as checkboxes. */
+  board: readonly ToolRestrictionGroup[]
   /** The preset's authored `tools.yml` default, when published. */
   authored?: readonly string[]
 }
@@ -61,6 +64,23 @@ export function savedOverridesOf(view: SettingsNamespaceView): Record<string, { 
     }
   }
   return result
+}
+
+/**
+ * Read the shared deployment board the host seeds into the namespace. All
+ * presets share one board (the full composed tool set), so the section can
+ * render the same checkbox picker the composer does for every preset.
+ * @param view - tool-restriction namespace descriptor.
+ * @returns the grouped board, or empty when the host has not seeded one.
+ */
+export function boardOf(view: SettingsNamespaceView): readonly ToolRestrictionGroup[] {
+  const boards = (view.value as { boards?: Record<string, unknown> } | null)?.boards
+  const board = boards?.['default']
+  if (!Array.isArray(board)) return []
+  return board.filter((group): group is ToolRestrictionGroup =>
+    typeof group === 'object' && group !== null
+      && typeof (group as { group?: unknown }).group === 'string'
+      && Array.isArray((group as { tools?: unknown }).tools))
 }
 
 /** Controller deriving the section from the shared mirror and the roster. */
@@ -230,6 +250,7 @@ export class ToolDefaultsSettingsController {
       return
     }
     const overrides = savedOverridesOf(view)
+    const board = boardOf(view)
     const rows: PresetToolDefaultRow[] = [...this.presets.entries()].map(([id, meta]) => {
       const override = overrides[id]
       return {
@@ -239,6 +260,7 @@ export class ToolDefaultsSettingsController {
         ...meta.description === undefined ? {} : { description: meta.description },
         allow: override?.allow ?? [],
         overridden: override !== undefined,
+        board,
       }
     })
     this.store.update((state) => {

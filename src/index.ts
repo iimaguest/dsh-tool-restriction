@@ -87,11 +87,21 @@ const optionalMaskShape = maskShape.default(undefined as unknown as { allow: str
 /**
  * The `tool-restriction` settings document schema. The cast records schemastery's
  * mutable-array widening over the domain's readonly `ToolMask`; on the JSON
- * wire the two serialize identically.
+ * wire the two serialize identically. `boards` is a derived, read-only field:
+ * the schema admits it so the describe view carries the per-preset picker
+ * board, and writes never target it (the section writes only `byPreset`).
  */
+const groupShape = z.object({
+  group: z.string(),
+  tools: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+  })),
+})
 const settingsShape = z.object({
   default: optionalMaskShape,
   byPreset: z.dict(maskShape).default({}),
+  boards: z.dict(z.array(groupShape)).default({}),
 }) as unknown as z<ToolRestrictionSettings>
 
 /** The guidance-section name convention the prose filter recognizes. */
@@ -176,6 +186,7 @@ export class ToolRestrictionService extends Service {
     const base: ToolRestrictionSettings = {
       ...config.default === undefined ? {} : { default: config.default },
       byPreset: {},
+      boards: {},
     }
     this.settingsSource = () => base
     ctx.inject(['settings'], (settingsCtx) => {
@@ -187,6 +198,12 @@ export class ToolRestrictionService extends Service {
         onChange: () => {},
       } satisfies SettingsSectionHooks<ToolRestrictionSettings>)
     })
+    // The settings section's per-preset board is derived from each preset's
+    // authored `tools.yml`; refresh it when the roster is available and re-read
+    // on a tool-set change (a preset recomposition emits `tools/change`) so a
+    // preset edit updates the board.
+    void this.refreshBoards()
+    ctx.on('tools/change', () => { void this.refreshBoards() })
 
     // Seeding: a fresh session materializes its seed mask into the log so the
     // session is self-contained (model-visible ⟺ logged). A session with a
@@ -317,11 +334,14 @@ export class ToolRestrictionService extends Service {
             return { kind: 'success', text: 'tool mask set to none (talk-only)' }
           }
           if (text === 'default') {
+            // Restore the preset's authored `tools.yml` default (not the
+            // user's saved per-preset override): "preset default" names the
+            // deployment's authored choice, the same value the settings
+            // section shows. Resolution is async (a filesystem read on the
+            // preset dir), so commit after the fold settles.
             const presetId = this.ctx.sessionProjections.stateOf(agent.session, 'agentPreset') ?? undefined
-            const saved = presetId === undefined ? undefined : this.settingsSource().byPreset[presetId]
-            const mask = saved ?? this.settingsSource().default ?? this.deploymentDefault
-            void this.set(agent, mask)
-            return { kind: 'success', text: mask === undefined ? 'tool mask restored to default (unrestricted)' : 'tool mask restored to default' }
+            void this.restoreDefault(agent, presetId)
+            return { kind: 'success', text: 'tool mask restored to preset default' }
           }
           try {
             const parsed = JSON.parse(text) as { allow?: unknown }
@@ -352,10 +372,23 @@ export class ToolRestrictionService extends Service {
    */
   async set(agent: Agent, mask: ToolMask | undefined): Promise<void> {
     const safe = mask === undefined ? undefined : sanitizeMask(mask)
+    this.commitCore(agent, safe)
+    await this.persistPresetPreference(agent, safe)
+  }
+
+  /**
+   * Apply one mask and append its durable selection. The apply runs BEFORE
+   * the append so a rejected name surfaces at the commit and never records a
+   * mask that could not apply; the synchronous `session/event` re-application
+   * that follows is idempotent. No persistence happens here — the caller
+   * decides whether the commit is a user preference or a transient restore.
+   * @param agent - the session's live agent.
+   * @param safe - the sanitized mask; `undefined` clears to unrestricted.
+   */
+  private commitCore(agent: Agent, safe: ToolMask | undefined): void {
     const applied = this.applies.get(agent)
     if (applied !== undefined) this.applyMask(agent, safe)
     agent.session.append('tool-restriction/selected', safe === undefined ? {} : { mask: safe })
-    await this.persistPresetPreference(agent, safe)
   }
 
   /**
@@ -463,6 +496,28 @@ export class ToolRestrictionService extends Service {
     applied.restrict?.()
     applied.guard()
     this.applies.delete(agent)
+  }
+
+  /**
+   * Seed the settings section's checkbox board with the full deployment tool
+   * set (grouped exactly like the blank-session picker board). The board is
+   * the global `ctx.tools` view — every composed tool with its model-facing
+   * description — so the section offers the same checkbox picker the composer
+   * does. It rides the settings namespace's `boards` field (a derived value
+   * the section reads; it is re-seeded on every startup and on `tools/change`
+   * so a preset recomposition updates the offered set).
+   * @returns settlement once the namespace reflects the current tool set.
+   */
+  private async refreshBoards(): Promise<void> {
+    const settings = this.ctx.get('settings')
+    if (settings === undefined) return
+    const board = buildGroups(this.ctx.tools.schemas())
+    if (board.length === 0) return
+    try {
+      await settings.update(TOOL_RESTRICTION_SETTINGS_NAMESPACE, { boards: { default: board } })
+    } catch (error: unknown) {
+      this.ctx.logger.warn(`dsh-tool-restriction: seeding settings board failed: ${String(error)}`)
+    }
   }
 
   /**
@@ -624,6 +679,42 @@ export class ToolRestrictionService extends Service {
     }
     await settings.mutate(TOOL_RESTRICTION_SETTINGS_NAMESPACE, [
       { op: 'set', path: ['byPreset', presetId], value: { allow: [...mask.allow] } },
+    ])
+  }
+
+  /**
+   * Restore one session's mask to the preset's authored `tools.yml` default
+   * (falling back to the deployment default when the preset publishes none),
+   * and clear the user's saved per-preset override so future sessions on this
+   * preset derive the same authored default. Unlike a normal selection, this
+   * deliberately ignores a saved override — "preset default" names the
+   * authored choice, the same value the settings section's "Preset default"
+   * hint describes.
+   * @param agent - the session's live agent.
+   * @param presetId - the session's agent preset id, if any.
+   * @returns settlement once the mask is committed.
+   */
+  private async restoreDefault(agent: Agent, presetId: string | undefined): Promise<void> {
+    const deploymentDefault = this.settingsSource().default ?? this.deploymentDefault
+    let authored: ToolMask | undefined
+    if (presetId !== undefined) {
+      const presets = this.ctx.get('agentPresets')
+      try {
+        const preset = presets === undefined ? undefined : await presets.resolve(presetId)
+        authored = preset?.tools?.default
+      } catch {
+        // A roster that no longer supplies the id (deleted preset) degrades to
+        // the deployment default.
+      }
+    }
+    const mask = authored ?? deploymentDefault
+    this.commitCore(agent, mask === undefined ? undefined : sanitizeMask(mask))
+    const settings = this.ctx.get('settings')
+    if (settings === undefined || presetId === undefined) return
+    // Restoring is not a preference: drop any saved override so the authored
+    // default governs the next session on this preset.
+    await settings.mutate(TOOL_RESTRICTION_SETTINGS_NAMESPACE, [
+      { op: 'unset', path: ['byPreset', presetId] },
     ])
   }
 }

@@ -90,10 +90,17 @@ export interface ToolRestrictionDescribe {
  * The file-backed `tool-restriction` settings section: a deployment default
  * plus one saved mask per preset id. `byPreset` is what survives a server
  * restart when the blank session that made the choice was discarded.
+ *
+ * `boards` is a derived, read-only view: the per-preset grouped tool board
+ * (from each preset's authored `tools.yml`), which the settings section
+ * renders as the checkbox picker. It is populated by the host and never a
+ * user-writable field — writes target only `byPreset`.
  */
 export interface ToolRestrictionSettings {
   /** Default mask for sessions (as a preset seeds none); absent = unrestricted. */
   default?: ToolMask
   /** Saved override per preset id (`{ allow }`); absent names restore the preset default. */
   byPreset: Record<string, ToolMask>
+  /** Derived per-preset tool board, in the settings section's display order. */
+  boards?: Record<string, readonly ToolRestrictionGroup[]>
 }

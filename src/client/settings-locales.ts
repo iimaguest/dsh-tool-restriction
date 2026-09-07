@@ -29,6 +29,11 @@ export type ToolDefaultsSettingsKey = BuiltInPresetCopyKey
   | 'toolsAria'
   | 'presetDefaultHint'
   | 'close'
+  | 'selectAll'
+  | 'selectNone'
+  | 'toolAria'
+  | 'showMore'
+  | 'showLess'
 
 /** English copy. */
 export const settingsEn: Record<ToolDefaultsSettingsKey, string> = {
@@ -48,6 +53,11 @@ export const settingsEn: Record<ToolDefaultsSettingsKey, string> = {
   toolsAria: 'Default tools',
   presetDefaultHint: 'The preset\u2019s authored tools.yml default, unless you set an override below.',
   close: 'Close',
+  selectAll: 'Select all',
+  selectNone: 'Select none',
+  toolAria: 'Toggle tool',
+  showMore: 'Show more',
+  showLess: 'Show less',
   presetStandardName: 'Standard mode',
   presetStandardDescription:
     'Full coding agent with file editing, shell, file and web search, skills, planning, goals, subagents, and workflows.',
@@ -80,6 +90,11 @@ export const settingsZh: Record<ToolDefaultsSettingsKey, string> = {
   toolsAria: '默认工具',
   presetDefaultHint: '预设自带的 tools.yml 默认值；除非你在下方设置了覆盖项。',
   close: '关闭',
+  selectAll: '全选',
+  selectNone: '全不选',
+  toolAria: '切换工具',
+  showMore: '展开',
+  showLess: '收起',
   presetStandardName: '标准模式',
   presetStandardDescription: '功能完整的编码 Agent，支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。',
   presetPtcName: 'PTC 模式',

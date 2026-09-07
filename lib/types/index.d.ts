@@ -96,6 +96,16 @@ export declare class ToolRestrictionService extends Service {
      */
     set(agent: Agent, mask: ToolMask | undefined): Promise<void>;
     /**
+     * Apply one mask and append its durable selection. The apply runs BEFORE
+     * the append so a rejected name surfaces at the commit and never records a
+     * mask that could not apply; the synchronous `session/event` re-application
+     * that follows is idempotent. No persistence happens here — the caller
+     * decides whether the commit is a user preference or a transient restore.
+     * @param agent - the session's live agent.
+     * @param safe - the sanitized mask; `undefined` clears to unrestricted.
+     */
+    private commitCore;
+    /**
      * Install the agent-scoped guard and apply the fold. Idempotent: an HMR
      * sweep that also sees `agent/created` installs exactly once.
      * @param agent - the agent to mask.
@@ -129,6 +139,17 @@ export declare class ToolRestrictionService extends Service {
     private boardFor;
     /** Dispose one agent's applied visible-set restriction and guard. */
     private uninstallForAgent;
+    /**
+     * Seed the settings section's checkbox board with the full deployment tool
+     * set (grouped exactly like the blank-session picker board). The board is
+     * the global `ctx.tools` view — every composed tool with its model-facing
+     * description — so the section offers the same checkbox picker the composer
+     * does. It rides the settings namespace's `boards` field (a derived value
+     * the section reads; it is re-seeded on every startup and on `tools/change`
+     * so a preset recomposition updates the offered set).
+     * @returns settlement once the namespace reflects the current tool set.
+     */
+    private refreshBoards;
     /**
      * Replace the agent's visible-set restriction with the live fold's mask.
      *
@@ -186,6 +207,19 @@ export declare class ToolRestrictionService extends Service {
     private filterGuidance;
     /** Write (or clear) the per-preset saved mask at the commit point. */
     private persistPresetPreference;
+    /**
+     * Restore one session's mask to the preset's authored `tools.yml` default
+     * (falling back to the deployment default when the preset publishes none),
+     * and clear the user's saved per-preset override so future sessions on this
+     * preset derive the same authored default. Unlike a normal selection, this
+     * deliberately ignores a saved override — "preset default" names the
+     * authored choice, the same value the settings section's "Preset default"
+     * hint describes.
+     * @param agent - the session's live agent.
+     * @param presetId - the session's agent preset id, if any.
+     * @returns settlement once the mask is committed.
+     */
+    private restoreDefault;
 }
 export default ToolRestrictionService;
 //# sourceMappingURL=index.d.ts.map
