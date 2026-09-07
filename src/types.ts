@@ -11,6 +11,17 @@
 
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    /** The folded tool-mask picker state (current, lock, grouped board). */
+    'tool-restriction': ToolRestrictionDescribe
+  }
+  interface SessionProjectionMap {
+    /** The picker's read side, derived from the folded state. */
+    'tool-restriction': ToolRestrictionDescribe
+  }
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
@@ -37,11 +48,16 @@ export interface ToolMask {
 /**
  * The wire shape of the durable selection and the projection unit: the
  * event payload (`{ mask }`) and the `toolRestriction.describe` answer.
- * `mask` absent = unrestricted.
+ * `mask` absent = unrestricted. The `groups` field is display-only seed
+ * material (the blank-session picker board) that rides the same known event
+ * so a fresh session shows its tool set before the first request folds a
+ * `request/header`.
  */
 export interface ToolRestrictionSelect {
   /** The selected mask, absent when the session runs unrestricted. */
   mask?: ToolMask
+  /** The blank-session picker board, folded into the projection when present. */
+  groups?: readonly ToolRestrictionGroup[]
 }
 
 /** One tool listed under a group in the picker projection. */

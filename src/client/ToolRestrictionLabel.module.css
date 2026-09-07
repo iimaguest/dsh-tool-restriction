@@ -1,0 +1,150 @@
+/* Session-header tool-mask control: a read-only fold pill that opens the
+   full composed board, closed by default. */
+
+.anchor {
+  position: relative;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  height: 22px;
+  padding: 0 4px 0 2px;
+  border: none;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-tsp-secondary);
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.label:hover,
+.label[aria-expanded='true'] {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon {
+  flex: none;
+  opacity: 0.7;
+}
+
+/* The board reports the session's tool set; large compositions host tens of
+   tools, so it scrolls inside its own bound. It mirrors the # subagents and #
+   background jobs menus (opaque --dsw-specific-menu on the same border/radius/
+   shadow/max-height/max-width language) including their ABSOLUTE anchoring to
+   the pill's left edge, so the board scrolls with the conversation, stays
+   glued to its pill, and its internal long-list scroll never chain-scrolls the
+   page underneath (overscroll-behavior: contain). */
+.board {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 336px;
+  max-width: min(400px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 140px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-shadow-lv3);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.boardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.boardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.boardHint {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-caption);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupName {
+  padding: 4px 2px 2px;
+  font-size: 11px;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-caption);
+}
+
+.tool {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.toolText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.checkbox {
+  flex: none;
+  margin-top: 2px;
+  accent-color: var(--dsw-alias-button-primary-fill);
+}
+
+.toolName {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.toolDesc {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* An unticked row reads dimmed: its name drops to caption and the
+   description fades, so the tick state is scannable without reading the
+   boxes. The board stays a report — nothing here is hoverable or editable. */
+.toolOff .toolName {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.toolOff .toolDesc {
+  opacity: 0.65;
+}

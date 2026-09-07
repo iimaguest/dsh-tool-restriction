@@ -18,7 +18,9 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import { dirname } from 'node:path'
 import z from '@deepseek-ai/schemastery'
+import { z as zod } from 'zod'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 // Type-only: pulls the agent lifecycle events and the `agents` registry merge.
 import type {} from '@deepseek-ai/dsh-agent'
@@ -26,13 +28,17 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 // Side-effect type import: resolves `ctx.sessionProjections` (the projection
 // registry the seed chain reads the session's `agentPreset` through).
 import type {} from '@deepseek-ai/dsh-session-projection'
-// Type-only: resolves `ctx.tools` (the registry the mask filters).
-import type {} from '@deepseek-ai/dsh-tools'
+// Type-only: pulls the `ctx.commands` face (the /tool-restriction write path).
+import type {} from '@deepseek-ai/dsh-commands'
+// Resolves `ctx.tools` (the registry the mask filters) and the reserved PTC
+// transport the mask must never name.
+import { RUN_CODE_NAME } from '@deepseek-ai/dsh-tools'
 import type { AgentPreset } from '@deepseek-ai/dsh-agent-presets'
 import type { SettingsNamespace, SettingsSectionHooks } from '@deepseek-ai/dsh-settings'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
+import { readPresetTools } from './tools.js'
 import type {
-  ToolMask, ToolRestrictionSelect, ToolRestrictionSettings,
+  ToolMask, ToolRestrictionDescribe, ToolRestrictionGroup, ToolRestrictionSelect, ToolRestrictionSettings,
 } from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -106,6 +112,34 @@ export function resolveSessionToolRestriction(events: readonly SessionEvent[]): 
   return undefined
 }
 
+/** The display bucket tool names without a `tool:`-prefix fall into. */
+const OTHER_GROUP = 'Other'
+
+/**
+ * Group assembled tool schemas into board rows by their `tool:`-prefix, the
+ * same convention the guidance-prose filter uses. Names sharing a prefix fold
+ * into one group named after the prefix; the rest land in `Other`. A tool-less
+ * header yields an empty board.
+ * @param tools - assembled tool schemas from a `request/header`.
+ * @returns the grouped board rows, preserving declaration order within rows.
+ */
+export function buildGroups(tools: readonly { name: string; description: string }[]): readonly ToolRestrictionGroup[] {
+  const byGroup = new Map<string, { name: string; description: string }[]>()
+  for (const tool of tools) {
+    // The reserved PTC transport is not an end-capability tool the mask can
+    // name (`tools.restrict()` rejects it): it always remains callable, so it
+    // never appears on the picker board or in a committed mask.
+    if (tool.name === RUN_CODE_NAME) continue
+    const match = /^tool:([^:]+)$/.exec(tool.name)
+    const group = match === null ? OTHER_GROUP : (match[1] ?? OTHER_GROUP)
+    const row = byGroup.get(group)
+    if (row === undefined) byGroup.set(group, [tool])
+    else row.push(tool)
+  }
+  return [...byGroup.entries()].map(([group, row]) => ({ group, tools: row }))
+}
+
+
 /** Per-agent applied state owned by this service, unwound with the agent. */
 interface AppliedRestriction {
   /** Dispose the agent-scoped visible-set restriction; undefined while unrestricted. */
@@ -175,10 +209,21 @@ export class ToolRestrictionService extends Service {
     // every surface watching `ctx.remote.$on('tool-restriction/selected')`
     // hears the fold as soon as it is durable (model-visible ⟺ logged).
     ctx.on('session/event', (session, event) => {
-      if (event.type !== 'tool-restriction/selected') return
-      ctx.emit('tool-restriction/selected', session.id, event.data.mask)
-      const agent = ctx.agents.get(session.id)
-      if (agent !== undefined) this.applyForAgent(agent)
+      if (event.type === 'tool-restriction/selected') {
+        ctx.emit('tool-restriction/selected', session.id, event.data.mask)
+        const agent = ctx.agents.get(session.id)
+        if (agent !== undefined) this.applyForAgent(agent)
+        return
+      }
+      // A blank-window preset switch recomposes the same agent's tools (no
+      // `agent/created` fires), so the picker board must be re-seeded for the
+      // new composition. The seed appends a board-carrying selection; the fold
+      // above keeps the existing mask, and a `request/header` supersedes it
+      // once the first turn runs.
+      if (event.type === 'agent-preset/selected') {
+        const agent = ctx.agents.get(session.id)
+        if (agent !== undefined) void this.seedBoard(agent)
+      }
     })
 
     // Guidance prose follows the mask: drop `tool:<name>` sections whose tool
@@ -189,6 +234,108 @@ export class ToolRestrictionService extends Service {
     ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
       const assembled = await next()
       return this.filterGuidance(assembled, context.agent)
+    })
+
+    // The tool-restriction projection unit: fold the durable selection into
+    // the picker's describe view (current mask, lock state, and the grouped
+    // visible tool board). The board comes from the assembled `request/header`
+    // tools (already logged ⟺ model-visible), so the projection is pure over
+    // committed events and needs no session access. The unit child activates
+    // only when a projection registry is composed (headless assemblies stay
+    // unaffected).
+    const describeSchema = zod.object({
+      current: zod.object({
+        allow: zod.array(zod.string()),
+      }).optional(),
+      locked: zod.boolean(),
+      groups: zod.array(zod.object({
+        group: zod.string(),
+        tools: zod.array(zod.object({
+          name: zod.string(),
+          description: zod.string(),
+        })),
+      })),
+    }) as unknown as zod.ZodType<ToolRestrictionDescribe>
+    ctx.inject(['sessionProjections'], (projectionCtx) => {
+      projectionCtx.sessionProjections.register<'tool-restriction', ToolRestrictionDescribe>({
+        key: 'tool-restriction',
+        stateSchema: describeSchema,
+        init: () => ({ locked: false, groups: [] }),
+        apply: (state, event) => {
+          switch (event.type) {
+            case 'tool-restriction/selected':
+              return {
+                ...state,
+                current: event.data.mask,
+                // A user toggle carries no board; keep the seeded (or first
+                // request's) board so the picker never clears while the
+                // session is blank.
+                groups: event.data.groups ?? state.groups,
+                locked: state.locked,
+              }
+            case 'turn/start':
+              return { ...state, locked: true }
+            case 'request/header':
+              return {
+                ...state,
+                groups: buildGroups(event.data.header.tools ?? []),
+              }
+            default:
+              return state
+          }
+        },
+        wire: { viewSchema: describeSchema, view: state => state },
+        stateVersion: 1,
+      })
+    })
+
+    // The /tool-restriction command: the one write path a web client uses
+    // (the hero picker submits the chosen mask as this line). Only a blank
+    // session may change its mask — the first turn fixes it forever.
+    ctx.inject(['commands'], (commandCtx) => {
+      commandCtx.commands.register({
+        name: 'tool-restriction',
+        description: 'Set the per-session tool mask (allow-list); only while the session is blank',
+        input: { hint: '<all|none|default|{"allow":["tool:a","tool:b"]}>' },
+        handler: ({ agent, rawInput }) => {
+          const text = rawInput.trim()
+          if (text === '') {
+            const mask = resolveSessionToolRestriction(agent.session.snapshotEvents())
+            return {
+              kind: 'success',
+              text: mask === undefined
+                ? 'tool mask unrestricted'
+                : `tool mask allows: ${mask.allow.join(', ') || '(none)'}`,
+            }
+          }
+          if (text === 'all') {
+            void this.set(agent, undefined)
+            return { kind: 'success', text: 'tool mask cleared to unrestricted' }
+          }
+          if (text === 'none') {
+            void this.set(agent, { allow: [] })
+            return { kind: 'success', text: 'tool mask set to none (talk-only)' }
+          }
+          if (text === 'default') {
+            const presetId = this.ctx.sessionProjections.stateOf(agent.session, 'agentPreset') ?? undefined
+            const saved = presetId === undefined ? undefined : this.settingsSource().byPreset[presetId]
+            const mask = saved ?? this.settingsSource().default ?? this.deploymentDefault
+            void this.set(agent, mask)
+            return { kind: 'success', text: mask === undefined ? 'tool mask restored to default (unrestricted)' : 'tool mask restored to default' }
+          }
+          try {
+            const parsed = JSON.parse(text) as { allow?: unknown }
+            if (!Array.isArray(parsed.allow) || parsed.allow.some(name => typeof name !== 'string')) {
+              throw new Error('invalid mask')
+            }
+            const mask = sanitizeMask({ allow: parsed.allow })
+            void this.set(agent, mask)
+            return { kind: 'success', text: `tool mask allows: ${mask.allow.join(', ') || '(none)'}` }
+          } catch {
+            return { kind: 'error', text: 'invalid mask (use all|none|default or {"allow":["tool:a"]})' }
+          }
+        },
+      })
     })
   }
 
@@ -204,10 +351,11 @@ export class ToolRestrictionService extends Service {
    * @param mask - the selected mask; `undefined` clears to unrestricted.
    */
   async set(agent: Agent, mask: ToolMask | undefined): Promise<void> {
+    const safe = mask === undefined ? undefined : sanitizeMask(mask)
     const applied = this.applies.get(agent)
-    if (applied !== undefined) this.applyMask(agent, mask)
-    agent.session.append('tool-restriction/selected', mask === undefined ? {} : { mask })
-    await this.persistPresetPreference(agent, mask)
+    if (applied !== undefined) this.applyMask(agent, safe)
+    agent.session.append('tool-restriction/selected', safe === undefined ? {} : { mask: safe })
+    await this.persistPresetPreference(agent, safe)
   }
 
   /**
@@ -230,6 +378,82 @@ export class ToolRestrictionService extends Service {
     })
     this.applies.set(agent, { restrict: undefined, guard })
     this.applyForAgent(agent)
+    void this.seedBoard(agent)
+  }
+
+  /**
+   * Fold the blank-session picker board into the projection once the agent
+   * exists (the session seed cannot, because `session/created` precedes
+   * `agent/created` and the tool registry needs the agent scope). The board
+   * derives from the preset's authored `tools.yml` — the authoritative
+   * per-preset default tool list — falling back to the agent's assembled
+   * schemas when the preset publishes no tool metadata. If the seeded
+   * selection already carries a board, or a `request/header` has already
+   * run, nothing is appended — the board is display-only and the first
+   * turn's assembled tools are the authoritative source.
+   * @param agent - the freshly composed agent.
+   */
+  private async seedBoard(agent: Agent): Promise<void> {
+    const session = agent.session
+    const events = session.snapshotEvents()
+    if (events.some(event => event.type === 'request/header')) return
+    const presetId = this.ctx.sessionProjections.stateOf(session, 'agentPreset') ?? undefined
+    const board = await this.boardFor(agent, presetId)
+    if (board.length === 0) return
+    const last = events.at(-1)
+    if (last?.type === 'tool-restriction/selected' && last.data.groups !== undefined) return
+    const mask = resolveSessionToolRestriction(events)
+    // Append only when the log does not already record a board: the appended
+    // selection preserves the folded mask (or unrestricted) and carries the
+    // grouped board, so the picker has something to show before the first
+    // request assembles tools. The `session/event` echo re-applies the same
+    // mask idempotently.
+    if (mask === undefined) session.append('tool-restriction/selected', { groups: board })
+    else this.materialize(session, mask, board)
+  }
+
+  /**
+   * Build the blank-session picker board for one agent. Prefers the preset's
+   * authored `tools.yml` `groups` (group → tool names, the display/seed data
+   * that outlives a re-compose); without declared groups, the preset's
+   * authored `default.allow` is the per-preset default tool list and seeds
+   * the board rows. Falls back to the agent's assembled schemas grouped by
+   * `tool:`-prefix when the preset publishes no tool metadata at all. The
+   * reserved PTC transport never appears.
+   * @param agent - the agent whose board is being built.
+   * @param presetId - the session's agent preset id, if any.
+   * @returns the grouped board rows in display order.
+   */
+  private async boardFor(
+    agent: Agent,
+    presetId: string | undefined,
+  ): Promise<readonly ToolRestrictionGroup[]> {
+    const presets = this.ctx.get('agentPresets')
+    if (presetId !== undefined && presets !== undefined) {
+      try {
+        const preset = await presets.resolve(presetId)
+        const tools = await readPresetTools(dirname(preset.path))
+        const groups = tools?.groups
+        if (groups !== undefined && Object.keys(groups).length > 0) {
+          return Object.entries(groups).flatMap(([group, names]) => {
+            const row = names
+              .filter(name => name !== RUN_CODE_NAME)
+              .map(name => ({ name, description: '' }))
+            return row.length === 0 ? [] : [{ group, tools: row }]
+          })
+        }
+        const allow = tools?.default?.allow
+        if (allow !== undefined && allow.length > 0) {
+          return buildGroups(allow
+            .filter(name => name !== RUN_CODE_NAME)
+            .map(name => ({ name, description: '' })))
+        }
+      } catch {
+        // A roster that no longer supplies the id, or a broken tools.yml,
+        // degrades the board to the agent's assembled schemas.
+      }
+    }
+    return buildGroups(agent.ctx.tools.schemas(agent))
   }
 
   /** Dispose one agent's applied visible-set restriction and guard. */
@@ -327,9 +551,22 @@ export class ToolRestrictionService extends Service {
     this.materialize(session, mask)
   }
 
-  /** Append the seed mask as the session's own durable selection. */
-  private materialize(session: Session, mask: ToolMask): void {
-    session.append('tool-restriction/selected', { mask })
+  /**
+   * Append the seed mask as the session's own durable selection, optionally
+   * carrying the blank-session picker board. The board is display seed data
+   * that rides the same known event so a fresh session shows its tool set
+   * before the first request folds a `request/header`; the projection folds
+   * it into the picker state and `request/header` supersedes it once a turn
+   * runs.
+   * @param session - the session being seeded.
+   * @param mask - the mask to commit.
+   * @param groups - the blank-session picker board, when computable now.
+   */
+  private materialize(session: Session, mask: ToolMask, groups?: readonly ToolRestrictionGroup[]): void {
+    session.append('tool-restriction/selected', {
+      mask,
+      ...groups === undefined || groups.length === 0 ? {} : { groups },
+    })
   }
 
   /**
@@ -353,9 +590,22 @@ export class ToolRestrictionService extends Service {
       // the mask (the ancestor filter exempts them), so their prose stays.
       return tools.get(name, agent) !== undefined
     })
-    return sections.length === assembly.sections.length
-      ? assembly
-      : { ...assembly, sections }
+    // The model-visible tool block (what becomes `request/header.tools`) must
+    // reflect the mask: an own-layer registration (subagent, delegation) is
+    // exempt from `tools.restrict`'s visibility filter, so without this the
+    // model would still be offered tools the mask excludes — a "talk-only"
+    // session would keep seeing delegation tools. Restrict the assembled
+    // schemas to the allowed set; an empty mask yields an empty block and the
+    // loop omits the `tools` field entirely.
+    const allowed = new Set(mask.allow)
+    const toolsFiltered = assembly.tools.filter(tool => allowed.has(tool.name))
+    if (sections.length === assembly.sections.length
+      && toolsFiltered.length === assembly.tools.length) return assembly
+    return {
+      ...assembly,
+      sections,
+      tools: toolsFiltered,
+    }
   }
 
   /** Write (or clear) the per-preset saved mask at the commit point. */
@@ -381,6 +631,19 @@ export class ToolRestrictionService extends Service {
 /** Whether the session log already records a mask selection. */
 function hasSelection(events: readonly SessionEvent[]): boolean {
   return events.some(event => event.type === 'tool-restriction/selected')
+}
+
+/**
+ * Remove the reserved PTC presentation transport from a committed mask. The
+ * transport is not an end-capability tool: `tools.restrict()` rejects it and
+ * it stays callable no matter the mask, so a mask that names it is either a
+ * client send error or an inherited default — both resolve to "not masked".
+ * @param mask - the mask to sanitize.
+ * @returns the mask with `run_code` removed from `allow`.
+ */
+function sanitizeMask(mask: ToolMask): ToolMask {
+  const allow = mask.allow.filter(name => name !== RUN_CODE_NAME)
+  return allow.length === mask.allow.length ? mask : { allow }
 }
 
 export default ToolRestrictionService

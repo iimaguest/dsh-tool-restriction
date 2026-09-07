@@ -1,0 +1,109 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.desc {
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+  line-height: 1.5;
+}
+
+.error {
+  font-size: 13px;
+  color: var(--vscode-errorForeground, #f14c4c);
+}
+
+.loading {
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--vscode-panel-border, #3a3a3a);
+  border-radius: 6px;
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.overridden {
+  font-size: 12px;
+  color: var(--vscode-charts-blue, #3794ff);
+}
+
+.rowDesc {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+}
+
+.tools {
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.muted {
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+  font-style: italic;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground, #8b8b8b);
+}
+
+.editInput {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid var(--vscode-input-border, #4a4a4a);
+  border-radius: 4px;
+  background: var(--vscode-input-background, #2a2a2a);
+  color: var(--vscode-input-foreground, #ccc);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.saved {
+  font-size: 12px;
+  color: var(--vscode-charts-green, #89d185);
+}

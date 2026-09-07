@@ -21,7 +21,7 @@ import z from '@deepseek-ai/schemastery';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { SessionEvent } from '@deepseek-ai/dsh-session';
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings';
-import type { ToolMask, ToolRestrictionSelect } from './types.js';
+import type { ToolMask, ToolRestrictionGroup, ToolRestrictionSelect } from './types.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         toolRestriction: ToolRestrictionService;
@@ -39,7 +39,7 @@ declare module '@deepseek-ai/dsh-session/types' {
         'tool-restriction/selected': ToolRestrictionSelect;
     }
 }
-export type * from './types.js';
+export type * from './types.ts';
 /** Settings namespace carrying the per-preset saved masks and the default. */
 export declare const TOOL_RESTRICTION_SETTINGS_NAMESPACE: SettingsNamespace;
 /** Plugin config: a deployment default mask for sessions that derive none. */
@@ -57,6 +57,18 @@ export interface Config {
  * @returns the last selected mask, or undefined when none was recorded.
  */
 export declare function resolveSessionToolRestriction(events: readonly SessionEvent[]): ToolMask | undefined;
+/**
+ * Group assembled tool schemas into board rows by their `tool:`-prefix, the
+ * same convention the guidance-prose filter uses. Names sharing a prefix fold
+ * into one group named after the prefix; the rest land in `Other`. A tool-less
+ * header yields an empty board.
+ * @param tools - assembled tool schemas from a `request/header`.
+ * @returns the grouped board rows, preserving declaration order within rows.
+ */
+export declare function buildGroups(tools: readonly {
+    name: string;
+    description: string;
+}[]): readonly ToolRestrictionGroup[];
 /**
  * The session-level tool mask: folds and applies the durable selection,
  * seeds the per-preset default, filters guidance prose, and owns the guard.
@@ -89,6 +101,32 @@ export declare class ToolRestrictionService extends Service {
      * @param agent - the agent to mask.
      */
     private installForAgent;
+    /**
+     * Fold the blank-session picker board into the projection once the agent
+     * exists (the session seed cannot, because `session/created` precedes
+     * `agent/created` and the tool registry needs the agent scope). The board
+     * derives from the preset's authored `tools.yml` — the authoritative
+     * per-preset default tool list — falling back to the agent's assembled
+     * schemas when the preset publishes no tool metadata. If the seeded
+     * selection already carries a board, or a `request/header` has already
+     * run, nothing is appended — the board is display-only and the first
+     * turn's assembled tools are the authoritative source.
+     * @param agent - the freshly composed agent.
+     */
+    private seedBoard;
+    /**
+     * Build the blank-session picker board for one agent. Prefers the preset's
+     * authored `tools.yml` `groups` (group → tool names, the display/seed data
+     * that outlives a re-compose); without declared groups, the preset's
+     * authored `default.allow` is the per-preset default tool list and seeds
+     * the board rows. Falls back to the agent's assembled schemas grouped by
+     * `tool:`-prefix when the preset publishes no tool metadata at all. The
+     * reserved PTC transport never appears.
+     * @param agent - the agent whose board is being built.
+     * @param presetId - the session's agent preset id, if any.
+     * @returns the grouped board rows in display order.
+     */
+    private boardFor;
     /** Dispose one agent's applied visible-set restriction and guard. */
     private uninstallForAgent;
     /**
@@ -125,7 +163,17 @@ export declare class ToolRestrictionService extends Service {
      * @param deploymentDefault - the fallback when the preset publishes none.
      */
     private seedPresetDefault;
-    /** Append the seed mask as the session's own durable selection. */
+    /**
+     * Append the seed mask as the session's own durable selection, optionally
+     * carrying the blank-session picker board. The board is display seed data
+     * that rides the same known event so a fresh session shows its tool set
+     * before the first request folds a `request/header`; the projection folds
+     * it into the picker state and `request/header` supersedes it once a turn
+     * runs.
+     * @param session - the session being seeded.
+     * @param mask - the mask to commit.
+     * @param groups - the blank-session picker board, when computable now.
+     */
     private materialize;
     /**
      * Fold the guidance sections that accompany a masked-out tool out of the

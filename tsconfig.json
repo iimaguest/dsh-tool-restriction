@@ -1,27 +1,80 @@
 {
-  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    {
-      "compilerOptions": {
-        "target": "es2024",
-        "module": "esnext",
-        "moduleResolution": "bundler",
-        "lib": ["es2024"],
-        "strict": true,
-        "noImplicitAny": true,
-        "noUncheckedIndexedAccess": true,
-        "declaration": true,
-        "declarationMap": true,
-        "sourceMap": true,
-        "composite": true,
-        "incremental": true,
-        "skipLibCheck": true,
-        "esModuleInterop": true,
-        "resolveJsonModule": true,
-        "isolatedModules": true,
-        "verbatimModuleSyntax": true,
-        "types": ["node"]
-      },
-      "include": ["src"]
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2024", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "paths": {
+      "@deepseek-ai/cordis": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/vendor/cordis/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/schemastery": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/vendor/schemastery/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/cosmokit": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/vendor/cosmokit/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-atomic-write": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/util/atomic-write/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-invariants": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/runtime-diagnostics/invariants/lib/types/index.d.ts"
+      ],
+      "js-yaml": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/node_modules/@types/js-yaml/index.d.ts"
+      ],
+      "zod": [
+        "C:/Users/00089093/IimaguestProjects/dsh-escalation-policy/node_modules/.pnpm/zod@4.5.4/node_modules/zod/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-agent": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/core/agent/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-agent-presets": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/preset/agent-presets/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-session": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/core/session/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-session/types": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/core/session/lib/types/types.d.ts"
+      ],
+      "@deepseek-ai/dsh-session-projection": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/session/session-projection/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-session-projection/types": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/session/session-projection/lib/types/types.d.ts"
+      ],
+      "@deepseek-ai/dsh-commands": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/interaction/commands/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-tools": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/core/tools/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-settings": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/settings/settings/lib/types/index.d.ts"
+      ],
+      "@deepseek-ai/dsh-system-prompt": [
+        "C:/Users/00089093/IimaguestProjects/deepseek-harness/packages/core/system-prompt/lib/types/index.d.ts"
+      ]
     }
-      "path": "../../core/system-prompt"
+  },
+  "include": ["src"],
+  "exclude": ["src/client"]
+}
